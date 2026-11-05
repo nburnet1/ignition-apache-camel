@@ -1,0 +1,59 @@
+# Registry bean: idem-message-ids. Project library: CamelExamples.idempotent_consumer.
+- route:
+    id: idem-http-input
+    from:
+      uri: ignition-gateway-http:/camel-example-idempotent-consumer/submit?httpMethodRestrict=POST
+      steps:
+        - to: direct:idempotent-submit
+
+- route:
+    id: idem-tag-input
+    from:
+      uri: ignition-tag:[default]CamelExamples/IdempotentConsumer/Input
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - unmarshal:
+                  json:
+                    library: Jackson
+              - to: direct:idempotent-submit
+
+- route:
+    id: idem-consume-once
+    from:
+      uri: direct:idempotent-submit
+      steps:
+        - to: ignition-script:idempotent_consumer.validate?project=CamelExamples
+        - setHeader:
+            name: idemMessageId
+            simple: '${body[id]}'
+        - removeProperty:
+            name: CamelDuplicateMessage
+        - idempotentConsumer:
+            idempotentRepository: '#bean:idem-message-ids'
+            simple: '${header.idemMessageId}'
+            eager: true
+            skipDuplicate: true
+            removeOnFailure: true
+            completionEager: false
+            steps:
+              - marshal:
+                  json:
+                    library: Jackson
+              - convertBodyTo:
+                  type: java.lang.String
+              - to: ignition-tag:[default]CamelExamples/IdempotentConsumer/LastDelivered
+        # Duplicates skip only the protected block. Every exchange still reaches
+        # this outcome step, so HTTP and tag callers can see what happened.
+        - choice:
+            when:
+              - simple: '${exchangeProperty.CamelDuplicateMessage} == true'
+                steps:
+                  - setBody:
+                      constant: skipped
+            otherwise:
+              steps:
+                - setBody:
+                    constant: delivered
+        - to: ignition-tag:[default]CamelExamples/IdempotentConsumer/LastResult

@@ -1,0 +1,59 @@
+name: ignition-apache-camel-acceptance
+
+# Isolated Gateway: no mounts of the developer's ignition/config or ignition/projects.
+services:
+  message-peer:
+    image: inductiveautomation/ignition:8.3.8
+    profiles: ["messaging"]
+    ports:
+      - "127.0.0.1:9289:8088"
+    environment:
+      ACCEPT_IGNITION_EULA: "Y"
+      GATEWAY_ADMIN_USERNAME: admin
+      GATEWAY_ADMIN_PASSWORD: password
+      IGNITION_EDITION: standard
+    command: ["-n", "camel-message-peer"]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: camel
+      POSTGRES_USER: camel
+      POSTGRES_PASSWORD: camel-acceptance-only
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U camel -d camel"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    # Test broker only: deliberately no host port and no shared developer-broker state.
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -V mqttv5 -h localhost -t '$$SYS/broker/version' -C 1 -W 3 >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+  gateway:
+    image: inductiveautomation/ignition:8.3.8
+    ports:
+      - "127.0.0.1:9288:8088"
+    environment:
+      ACCEPT_IGNITION_EULA: "Y"
+      GATEWAY_ADMIN_USERNAME: admin
+      GATEWAY_ADMIN_PASSWORD: password
+      IGNITION_EDITION: standard
+      ACCEPT_MODULE_CERTS: com.noahburnette.ignition.apachecamel
+    volumes:
+      - ./camel-modules:/external-modules:ro
+      - projects:/usr/local/bin/ignition/data/projects
+    command: >-
+      -n camel-acceptance
+      --
+      -Dignition.gateway.externalModulesFolder=/external-modules
+
+volumes:
+  projects:
+  postgres:

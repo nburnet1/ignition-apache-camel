@@ -1,0 +1,48 @@
+apiVersion: camel.apache.org/v1
+kind: Kamelet
+metadata:
+  name: normalize-temperature-action
+  labels:
+    camel.apache.org/kamelet.type: action
+spec:
+  definition:
+    title: Normalize a machine temperature
+    description: Convert a numeric Celsius or Fahrenheit reading to a common machine reading and classify it.
+    required:
+      - unit
+      - machine
+    properties:
+      unit:
+        title: Input unit
+        type: string
+        enum: [C, F]
+      machine:
+        title: Machine name
+        type: string
+      project:
+        title: Ignition project containing kamelets.normalize
+        type: string
+        default: CamelExamples
+      warningC:
+        title: High temperature threshold in Celsius
+        type: number
+        default: 80
+  dependencies:
+    - camel:kamelet
+  template:
+    from:
+      uri: kamelet:source
+      steps:
+        - setHeader:
+            name: kameletInputUnit
+            constant: "{{unit}}"
+        - setHeader:
+            name: kameletMachine
+            constant: "{{machine}}"
+        - setHeader:
+            name: kameletWarningC
+            constant: "{{warningC}}"
+        - to:
+            uri: "ignition-script:kamelets.normalize?project={{project}}"
+        - to:
+            uri: kamelet:sink

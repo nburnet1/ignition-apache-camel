@@ -1,0 +1,50 @@
+# Three source formats enter one normalization and processing service.
+- route:
+    id: unified-http-input
+    from:
+      uri: ignition-gateway-http:/camel-example-unified-readings/readings?httpMethodRestrict=POST
+      steps:
+        - setHeader:
+            name: readingSource
+            constant: http
+        - to: direct:normalize-reading
+
+- route:
+    id: unified-mqtt-input
+    from:
+      uri: example-mqtt:camel-demo/readings
+      steps:
+        - unmarshal:
+            json:
+              library: Jackson
+        - setHeader:
+            name: readingSource
+            constant: mqtt
+        - to: direct:normalize-reading
+
+- route:
+    id: unified-tag-input
+    from:
+      uri: ignition-tag:[default]CamelExamples/Unified/RawTemperature?includeInitial=false
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - setHeader:
+                  name: readingSource
+                  constant: ignition-tag
+              - to: direct:normalize-reading
+
+- route:
+    id: unified-reading-service
+    from:
+      uri: direct:normalize-reading
+      steps:
+        - to: ignition-script:unified_readings.normalize?project=CamelExamples
+        - marshal:
+            json:
+              library: Jackson
+        - convertBodyTo:
+            type: java.lang.String
+            charset: UTF-8
+        - to: ignition-tag:[default]CamelExamples/Unified/Latest

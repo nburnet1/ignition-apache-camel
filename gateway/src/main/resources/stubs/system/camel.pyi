@@ -1,0 +1,16 @@
+"""Gateway-only Apache Camel API. Names identify resources, not individual route IDs."""
+from typing import Any, Dict, List, Mapping, Optional
+
+def list() -> List[str]: ...
+def status(name: str) -> Dict[str, Any]:
+    """Status, components/registry/kamelets selections and safe startupFailure guidance; never exception messages or full URIs."""
+    ...
+def restart(name: str) -> None:
+    """Queue a restart; poll status. Disabled resources are not enabled."""
+    ...
+def send(name: str, endpoint: str, payload: Any, headers: Optional[Mapping[str, Any]] = None) -> None:
+    """Synchronous InOnly submission; no durable delivery guarantee."""
+    ...
+def request(name: str, endpoint: str, payload: Any, headers: Optional[Mapping[str, Any]] = None) -> Any:
+    """Synchronous InOut; timeout behavior belongs to the endpoint/route."""
+    ...

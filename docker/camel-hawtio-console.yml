@@ -1,0 +1,23 @@
+# Overlay for camel-hawtio.yml. No host port for the authenticated adapter.
+services:
+  hawtio-proxy:
+    build:
+      context: ..
+      dockerfile: docker/hawtio/proxy.Dockerfile
+    environment:
+      CAMEL_HAWTIO_PROXY_PASSWORD: ${CAMEL_HAWTIO_PROXY_PASSWORD:-password}
+      CAMEL_HAWTIO_CONSOLE_ORIGIN: http://127.0.0.1:${HAWTIO_PORT:-9390}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 9190), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  hawtio:
+    build: ./hawtio
+    ports:
+      - "127.0.0.1:${HAWTIO_PORT:-9390}:8080"
+    depends_on:
+      hawtio-proxy:
+        condition: service_healthy
+    restart: unless-stopped

@@ -1,0 +1,40 @@
+# Component: example-mqtt. Helpers: CamelExamples.work_order_mqtt.
+# Separate mirror root prevents an MQTT -> source tag -> MQTT feedback loop.
+- route:
+    id: wo-mqtt-to-mirror
+    startupOrder: 1
+    from:
+      uri: example-mqtt:camel-demo/work-orders/%23?clientId=camel-wo-mirror
+      steps:
+        - convertBodyTo:
+            type: java.lang.String
+            charset: UTF-8
+        - to: ignition-script:work_order_mqtt.prepareMirror?project=CamelExamples
+        - setHeader:
+            name: woMirrorTag
+            simple: '${body[tagPath]}'
+        - setBody:
+            simple: '${body[value]}'
+        - toD:
+            uri: 'ignition-tag:${header.woMirrorTag}'
+            cacheSize: 128
+
+- route:
+    id: wo-tags-to-mqtt
+    startupOrder: 2
+    from:
+      uri: ignition-tag:[default]CamelExamples/WorkOrders/**?includeInitial=true&capacity=2000
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - to: ignition-script:work_order_mqtt.encodeTag?project=CamelExamples
+              - filter:
+                  simple: '${body} != null'
+                  steps:
+                    - setHeader:
+                        name: CamelPahoOverrideTopic
+                        simple: '${body[topic]}'
+                    - setBody:
+                        simple: '${body[message]}'
+                    - to: example-mqtt:camel-demo/work-orders/_fallback?clientId=camel-wo-publisher&retained=true

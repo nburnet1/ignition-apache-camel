@@ -1,0 +1,32 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        maven {
+            url = "https://nexus.inductiveautomation.com/repository/public" 
+        }
+    }
+}
+
+rootProject.name = "ignition-apache-camel"
+
+dependencyResolutionManagement {
+    repositories {
+        // enable resolving dependencies from the inductive automation artifact repository
+        maven {
+            url "https://nexus.inductiveautomation.com/repository/public"
+            // Camel/Jolokia are published directly to Central; the SDK repository is not their authority.
+            content {
+                excludeGroup "org.jolokia"
+                excludeGroup "org.apache.camel"
+            }
+        }
+        mavenCentral()
+    }
+}
+
+include(
+":",
+    ":gateway",
+    ":web-ui"
+)

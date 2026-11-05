@@ -1,0 +1,19 @@
+- route:
+    id: tags-to-mqtt
+    from:
+      uri: ignition-tag:[default]ToMqtt/*?includeInitial=true
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - to:
+                  uri: ignition-script:inline
+                  parameters:
+                    expression: >-
+                      lambda value, headers:
+                      {'tag': headers['ignitionTagPath'], 'value': value,
+                      'timestamp': headers['ignitionTagTimestamp']}
+              - marshal:
+                  json:
+                    library: Jackson
+              - to: plant-mqtt:ignition/tags?clientId=ignition-tags-to-mqtt&qos=1&retained=true

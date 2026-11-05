@@ -1,0 +1,169 @@
+name: Release module
+
+# Publishing a GitHub Release for a vX.Y.Z tag builds, tests, signs, verifies,
+# and attaches the versioned .modl plus its SHA-256 checksum. A manual run is a
+# signing dry run: it uploads a workflow artifact without changing a release.
+#
+# Required repository or organization Actions secrets:
+#   SIGNING_KEYSTORE_B64
+#   SIGNING_CERT_B64
+#   SIGNING_KEYSTORE_PASSWORD
+#   SIGNING_CERT_ALIAS
+#   SIGNING_CERT_PASSWORD
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp for the signing dry run
+        required: true
+        default: 0.2.0
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, and attach module
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Derive release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Release tags must use plain vX.Y.Z form; Ignition module versions are numeric."
+              exit 1
+            fi
+            version="${tag#v}"
+            publish="true"
+          else
+            version="${{ inputs.version }}"
+            version="${version#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Dry-run version must use plain X.Y.Z form."
+              exit 1
+            fi
+            tag="v$version"
+            publish="false"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing material
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          CERT_B64: ${{ secrets.SIGNING_CERT_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          CERT_ALIAS: ${{ secrets.SIGNING_CERT_ALIAS }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in KEYSTORE_B64 CERT_B64 KEYSTORE_PASSWORD CERT_ALIAS CERT_PASSWORD; do
+            if [ -z "${!value}" ]; then
+              echo "::error::Missing required signing secret: $value"
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing-keystore.p12"
+          printf '%s' "$CERT_B64" | base64 --decode > "$RUNNER_TEMP/signing-cert.pem"
+          chmod 600 "$RUNNER_TEMP/signing-keystore.p12" "$RUNNER_TEMP/signing-cert.pem"
+
+      - name: Build, test, and sign module
+        env:
+          ORG_GRADLE_PROJECT_org.gradle.java.installations.auto-download: "false"
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          CERT_ALIAS: ${{ secrets.SIGNING_CERT_ALIAS }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          ./gradlew clean build --no-daemon --stacktrace \
+            -PreleaseVersion="${{ steps.version.outputs.version }}" \
+            -Pignition.signing.keystoreFile="$RUNNER_TEMP/signing-keystore.p12" \
+            -Pignition.signing.keystorePassword="$KEYSTORE_PASSWORD" \
+            -Pignition.signing.certFile="$RUNNER_TEMP/signing-cert.pem" \
+            -Pignition.signing.certAlias="$CERT_ALIAS" \
+            -Pignition.signing.certPassword="$CERT_PASSWORD"
+
+      - name: Verify and stage signed module
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_file="build/Ignition-Apache-Camel.modl"
+          if [ ! -s "$source_file" ]; then
+            echo "::error::Signed module was not produced: $source_file"
+            exit 1
+          fi
+
+          archive_listing="$(unzip -l "$source_file")"
+          if ! grep -q 'certificates.p7b' <<< "$archive_listing" || ! grep -q 'signatures.properties' <<< "$archive_listing"; then
+            echo "::error::The release module is missing its Ignition signature files."
+            exit 1
+          fi
+
+          version="${{ steps.version.outputs.version }}"
+          if ! unzip -p "$source_file" module.xml | grep -q "<version>$version</version>"; then
+            echo "::error::module.xml version does not match release version $version"
+            unzip -p "$source_file" module.xml
+            exit 1
+          fi
+
+          release_file="build/Ignition-Apache-Camel-$version.modl"
+          cp "$source_file" "$release_file"
+          sha256sum "$release_file" > "$release_file.sha256"
+          echo "path=$release_file" >> "$GITHUB_OUTPUT"
+          echo "checksum=$release_file.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed module dry run
+        if: steps.version.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-module-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.artifact.outputs.path }}
+            ${{ steps.artifact.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Attach module to GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload "${{ steps.version.outputs.tag }}" \
+            "${{ steps.artifact.outputs.path }}" \
+            "${{ steps.artifact.outputs.checksum }}" \
+            --clobber

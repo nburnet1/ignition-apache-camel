@@ -1,0 +1,17 @@
+# Additive overlay: never recreate the existing acceptance Gateway or its state.
+services:
+  artemis:
+    image: apache/activemq-artemis:2.44.0-alpine
+    environment:
+      ARTEMIS_USER: simulation
+      ARTEMIS_PASSWORD: simulation-local-only
+      ANONYMOUS_LOGIN: "false"
+    volumes:
+      - simulation-artemis:/var/lib/artemis-instance
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --url tcp://localhost:61616 --user simulation --password simulation-local-only"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+volumes:
+  simulation-artemis:

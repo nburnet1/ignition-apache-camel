@@ -1,0 +1,7 @@
+{
+  "title": "Camel acceptance fixtures",
+  "description": "Isolated test Gateway only",
+  "enabled": true,
+  "inheritable": false,
+  "parent": ""
+}

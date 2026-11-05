@@ -1,0 +1,55 @@
+# Edit CamelExamples/EIP/Input (a JSON array String tag) to exercise the route.
+- route:
+    id: eip-tag-input
+    from:
+      uri: ignition-tag:[default]CamelExamples/EIP/Input?includeInitial=true
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - unmarshal:
+                  json:
+                    library: Jackson
+              - to: direct:classify-readings
+
+# Optional authenticated JSON input for repeatable testing.
+- route:
+    id: eip-http-input
+    from:
+      uri: ignition-gateway-http:/camel-example-eip/exercise?httpMethodRestrict=POST
+      steps:
+        - to: direct:classify-readings
+        - setBody:
+            constant: processed
+
+- route:
+    id: eip-classify-readings
+    from:
+      uri: direct:classify-readings
+      steps:
+        # Splitter: process each reading separately.
+        - split:
+            simple: '${body}'
+            steps:
+              # Message Filter: ignore disabled readings.
+              - filter:
+                  simple: '${body[enabled]} == true'
+                  steps:
+                    # Content-Based Router: choose high or normal output.
+                    - choice:
+                        when:
+                          - simple: '${body[value]} >= 75'
+                            steps:
+                              - setBody:
+                                  simple: '${body[sensor]} = ${body[value]} (HIGH)'
+                              - to: ignition-tag:[default]CamelExamples/EIP/High
+                        otherwise:
+                          steps:
+                            - setBody:
+                                simple: '${body[sensor]} = ${body[value]} (NORMAL)'
+                            - to: ignition-tag:[default]CamelExamples/EIP/Normal
+                    # Multicast: deliver the same classified reading to both tags.
+                    - multicast:
+                        steps:
+                          - to: ignition-tag:[default]CamelExamples/EIP/LastRouted
+                          - to: ignition-tag:[default]CamelExamples/EIP/AuditLast

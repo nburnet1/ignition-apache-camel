@@ -1,0 +1,41 @@
+# Watch CamelExamples/ControlBus/Heartbeat and TickCount.
+# Write "suspend", "resume" or "status" to CamelExamples/ControlBus/Command.
+- route:
+    id: controlbus-heartbeat
+    from:
+      uri: timer:controlbus-heartbeat?period=2000&delay=1000&includeMetadata=true
+      steps:
+        - setBody:
+            simple: '${exchangeProperty.CamelTimerCounter}'
+        - to: ignition-tag:[default]CamelExamples/ControlBus/TickCount
+        - setBody:
+            simple: '${date:now:yyyy-MM-dd HH:mm:ss.SSS}'
+        - to: ignition-tag:[default]CamelExamples/ControlBus/Heartbeat
+
+- route:
+    id: controlbus-command
+    from:
+      uri: ignition-tag:[default]CamelExamples/ControlBus/Command?includeInitial=true
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - choice:
+                  when:
+                    - simple: '${body} == "suspend"'
+                      steps:
+                        - to: controlbus:route?routeId=controlbus-heartbeat&action=suspend
+                    - simple: '${body} == "resume"'
+                      steps:
+                        - to: controlbus:route?routeId=controlbus-heartbeat&action=resume
+              - to: controlbus:route?routeId=controlbus-heartbeat&action=status
+              - to: ignition-tag:[default]CamelExamples/ControlBus/RouteState
+
+# This monitor keeps reporting status even while the heartbeat is suspended.
+- route:
+    id: controlbus-state
+    from:
+      uri: timer:controlbus-state?period=2000&delay=500
+      steps:
+        - to: controlbus:route?routeId=controlbus-heartbeat&action=status
+        - to: ignition-tag:[default]CamelExamples/ControlBus/RouteState

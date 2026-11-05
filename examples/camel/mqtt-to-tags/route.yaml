@@ -1,0 +1,27 @@
+- route:
+    id: mqtt-to-tags
+    from:
+      uri: plant-mqtt:factory/readings?clientId=ignition-mqtt-to-tags&qos=1
+      steps:
+        - unmarshal:
+            json:
+              library: Jackson
+        - to:
+            uri: ignition-script:inline
+            parameters:
+              expression: >-
+                lambda body, headers:
+                [{'path': '[default]MQTT_{0}'.format(name), 'value': value}
+                for name, value in body.items()]
+        - split:
+            simple: '${body}'
+            stopOnException: true
+            steps:
+              - setHeader:
+                  name: targetTag
+                  simple: '${body[path]}'
+              - setBody:
+                  simple: '${body[value]}'
+              - toD:
+                  uri: 'ignition-tag:${header.targetTag}'
+                  cacheSize: 32

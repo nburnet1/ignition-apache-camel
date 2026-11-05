@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} | Ignition Apache Camel</title>
+  <link rel="stylesheet" href="/assets/docs.css">
+</head>
+<body>
+  <header><a href="/">Ignition Apache Camel</a><span>8.3</span></header>
+  <div class="layout">
+    <nav aria-label="Documentation">
+      <a href="/">Introduction</a>
+      <a href="/terminology/">Terminology</a>
+      <details open>
+        <summary><a href="/components/">Ignition Components</a><span class="nav-chevron" aria-hidden="true">›</span></summary>
+        <div class="nav-children">
+          <a href="/components/ignition-tag/">ignition-tag</a>
+          <a href="/components/ignition-script/">ignition-script</a>
+          <a href="/components/ignition-message/">ignition-message</a>
+          <a href="/components/ignition-perspective-message/">ignition-perspective-message</a>
+          <a href="/components/ignition-gateway-http/">ignition-gateway-http</a>
+        </div>
+      </details>
+      <details open>
+        <summary><a href="/integration-examples/">Integration Examples</a><span class="nav-chevron" aria-hidden="true">›</span></summary>
+        <div class="nav-children">
+          <a href="{{ sourceRepositoryUrl }}/tree/main/examples/camel">Examples on GitHub</a>
+        </div>
+      </details>
+      <details open>
+        <summary><a href="/camel/examples/">Jython Definitions</a><span class="nav-chevron" aria-hidden="true">›</span></summary>
+        <div class="nav-children">
+          <a href="/camel/examples/routes/">Routes</a>
+          <a href="/camel/examples/beans/">Beans</a>
+          <a href="/camel/examples/processor/">Processor</a>
+        </div>
+      </details>
+      <details open>
+        <summary><a href="/camel/api/">system.camel</a><span class="nav-chevron" aria-hidden="true">›</span></summary>
+        <div class="nav-children">
+          <a href="/camel/api/list/">list</a>
+          <a href="/camel/api/status/">status</a>
+          <a href="/camel/api/restart/">restart</a>
+          <a href="/camel/api/send/">send</a>
+          <a href="/camel/api/request/">request</a>
+        </div>
+      </details>
+      <a href="/getting-started/">Gateway UI</a>
+      <a href="/hawtio/">Hawtio integration</a>
+    </nav>
+    <main>{{ content | safe }}</main>
+  </div>
+</body>
+</html>

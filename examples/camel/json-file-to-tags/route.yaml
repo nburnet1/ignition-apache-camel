@@ -1,0 +1,27 @@
+- route:
+    id: json-file-to-tags
+    from:
+      uri: 'file:camel-inbox?fileName=readings.json&noop=true&readLock=changed&idempotentKey=${file:name}-${file:modified}'
+      steps:
+        - unmarshal:
+            json:
+              library: Jackson
+        - to:
+            uri: ignition-script:inline
+            parameters:
+              expression: >-
+                lambda body, headers:
+                [{'path': '[default]FILE_{0}'.format(name), 'value': value}
+                for name, value in body.items()]
+        - split:
+            simple: '${body}'
+            stopOnException: true
+            steps:
+              - setHeader:
+                  name: targetTag
+                  simple: '${body[path]}'
+              - setBody:
+                  simple: '${body[value]}'
+              - toD:
+                  uri: 'ignition-tag:${header.targetTag}'
+                  cacheSize: 32

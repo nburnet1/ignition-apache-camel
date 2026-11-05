@@ -1,0 +1,14 @@
+{
+  "name": "ignition-apache-camel-docs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "docs:build": "npm run docs:clean && eleventy",
+    "docs:serve": "eleventy --serve",
+    "docs:clean": "node -e \"const fs=require('node:fs'),path=require('node:path');fs.rmSync(path.join(path.dirname(process.env.npm_package_json),'_site'),{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.2",
+    "@11ty/eleventy-plugin-syntaxhighlight": "^5.0.2"
+  }
+}

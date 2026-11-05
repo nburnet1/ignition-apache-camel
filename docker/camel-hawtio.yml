@@ -1,0 +1,21 @@
+# Dedicated disposable Gateway. Does not recreate either existing developer stack.
+name: ignition-apache-camel-hawtio
+services:
+  gateway:
+    image: inductiveautomation/ignition:8.3.8
+    ports:
+      - "127.0.0.1:9488:8088"
+    environment:
+      ACCEPT_IGNITION_EULA: "Y"
+      GATEWAY_ADMIN_USERNAME: admin
+      GATEWAY_ADMIN_PASSWORD: password
+      IGNITION_EDITION: standard
+      ACCEPT_MODULE_CERTS: com.noahburnette.ignition.apachecamel
+    volumes:
+      - ../build/hawtio-modules:/external-modules:ro
+    command: >-
+      -n camel-hawtio
+      --
+      -Dignition.gateway.externalModulesFolder=/external-modules
+      -Dapachecamel.camel.hawtio.enabled=true
+      -Dapachecamel.camel.hawtio.scope=jvm-readonly

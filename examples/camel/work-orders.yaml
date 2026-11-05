@@ -1,0 +1,233 @@
+# Registry beans: wo-service (validation/state) and wo-batch (GroupedBodyAggregationStrategy).
+# Selected component: some-queue (SEDA). Queue capacity comes from its shared defaults.
+# Orders: [{"id":"WO-1001","location":"press-01","quantity":25}]
+- route:
+    id: wo-http-orders
+    from:
+      uri: ignition-gateway-http:/camel-example-work-orders/orders?httpMethodRestrict=POST
+      steps:
+        - to: ignition-script:work_orders.submitViaApi?project=CamelExamples
+        - setBody:
+            constant: accepted
+
+- route:
+    id: wo-input-tag
+    from:
+      uri: ignition-tag:[default]CamelExamples/WorkOrders/Input
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - unmarshal:
+                  json:
+                    library: Jackson
+              - to: direct:submit-orders
+
+- route:
+    id: wo-submit
+    from:
+      uri: direct:submit-orders
+      steps:
+        - setHeader:
+            name: woOperation
+            constant: submit
+        - process:
+            ref: wo-service
+        - wireTap:
+            uri: some-queue:wo-audit?waitForTaskToComplete=Never
+        - split:
+            simple: '${body}'
+            steps:
+              - to: some-queue:wo-pending?waitForTaskToComplete=Never
+
+# The Aggregator closes its current group every ten seconds.
+- route:
+    id: wo-ten-second-batches
+    from:
+      uri: some-queue:wo-pending?concurrentConsumers=1
+      steps:
+        - aggregate:
+            aggregationStrategy: '#bean:wo-batch'
+            correlationExpression:
+              constant: work-orders
+            completionInterval: 10000
+            steps:
+              - setHeader:
+                  name: woOperation
+                  constant: batch
+              - process:
+                  ref: wo-service
+              - wireTap:
+                  uri: some-queue:wo-audit?waitForTaskToComplete=Never
+              - split:
+                  simple: '${body}'
+                  steps:
+                    - to: direct:validate-and-assign
+
+- route:
+    id: wo-validate-and-assign
+    from:
+      uri: direct:validate-and-assign
+      steps:
+        - setHeader:
+            name: woOperation
+            constant: validate
+        - process:
+            ref: wo-service
+        - choice:
+            when:
+              - simple: '${header.woDisposition} == "READY"'
+                steps:
+                  - marshal:
+                      json:
+                        library: Jackson
+                  - convertBodyTo:
+                      type: java.lang.String
+                  - toD:
+                      uri: 'ignition-tag:${header.woActiveTag}'
+                      cacheSize: 8
+                  - setBody:
+                      constant: ACTIVE
+                  - toD:
+                      uri: 'ignition-tag:${header.woStatusTag}'
+                      cacheSize: 8
+                  - setHeader:
+                      name: woOperation
+                      constant: activated
+                  - process:
+                      ref: wo-service
+                  - wireTap:
+                      uri: some-queue:wo-audit?waitForTaskToComplete=Never
+              - simple: '${header.woDisposition} == "DEFER"'
+                steps:
+                  - wireTap:
+                      uri: some-queue:wo-audit?waitForTaskToComplete=Never
+                  - to: some-queue:wo-pending?waitForTaskToComplete=Never
+              - simple: '${header.woDisposition} == "REJECTED"'
+                steps:
+                  - wireTap:
+                      uri: some-queue:wo-audit?waitForTaskToComplete=Never
+
+- route:
+    id: wo-http-completion
+    from:
+      uri: ignition-gateway-http:/camel-example-work-orders/complete?httpMethodRestrict=POST
+      steps:
+        - to: ignition-script:work_orders.completeViaApi?project=CamelExamples
+
+- route:
+    id: wo-complete-order
+    from:
+      uri: direct:complete-order
+      steps:
+        - setHeader:
+            name: woOperation
+            constant: prepare-completion
+        - process:
+            ref: wo-service
+        - filter:
+            simple: '${header.woDisposition} == "COMPLETE"'
+            steps:
+              - setBody:
+                  constant: ''
+              - toD:
+                  uri: 'ignition-tag:${header.woActiveTag}'
+                  cacheSize: 8
+              - setBody:
+                  constant: IDLE
+              - toD:
+                  uri: 'ignition-tag:${header.woStatusTag}'
+                  cacheSize: 8
+              - setBody:
+                  constant: 'false'
+              - toD:
+                  uri: 'ignition-tag:${header.woCompleteTag}'
+                  cacheSize: 8
+              - setHeader:
+                  name: woOperation
+                  constant: completed
+              - process:
+                  ref: wo-service
+              - wireTap:
+                  uri: some-queue:wo-audit?waitForTaskToComplete=Never
+
+# Native Ignition 8.3.8 glob subscription includes newly created machines.
+# The script captures the active order ID and calls system.camel.request.
+- route:
+    id: wo-machine-completion-signals
+    from:
+      uri: ignition-tag:[default]CamelExamples/WorkOrders/Machines/*/Complete?includeInitial=true
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true && ${body} == true'
+            steps:
+              - to: ignition-script:work_orders.completionFromTag?project=CamelExamples
+
+# An alternative single shared tag input for {location, id} commands.
+- route:
+    id: wo-shared-completion-input
+    from:
+      uri: ignition-tag:[default]CamelExamples/WorkOrders/CompletionInput
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - unmarshal:
+                  json:
+                    library: Jackson
+              - to: direct:complete-order
+
+# Wire Tap is asynchronous; one audit consumer serializes dashboard projections.
+- route:
+    id: wo-wiretap-dashboard
+    from:
+      uri: some-queue:wo-audit?concurrentConsumers=1
+      steps:
+        - setHeader:
+            name: woOperation
+            constant: metrics
+        - process:
+            ref: wo-service
+        - split:
+            simple: '${body}'
+            steps:
+              - setHeader:
+                  name: woMetricTag
+                  simple: '${body[tagPath]}'
+              - setBody:
+                  simple: '${body[value]}'
+              - toD:
+                  uri: 'ignition-tag:${header.woMetricTag}'
+                  cacheSize: 16
+
+# Recover still-queued ledger entries when this demo context is restarted.
+- route:
+    id: wo-recover-queue
+    from:
+      uri: timer:wo-recovery?repeatCount=1&delay=1000
+      steps:
+        - setHeader:
+            name: woOperation
+            constant: recover
+        - process:
+            ref: wo-service
+        - wireTap:
+            uri: some-queue:wo-audit?waitForTaskToComplete=Never
+        - split:
+            simple: '${body}'
+            steps:
+              - to: some-queue:wo-pending?waitForTaskToComplete=Never
+
+- route:
+    id: wo-snapshot
+    from:
+      uri: ignition-gateway-http:/camel-example-work-orders/snapshot?httpMethodRestrict=POST
+      steps:
+        - to: direct:work-order-snapshot
+
+- route:
+    id: wo-direct-snapshot
+    from:
+      uri: direct:work-order-snapshot
+      steps:
+        - to: ignition-script:work_orders.snapshot?project=CamelExamples

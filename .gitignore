@@ -1,0 +1,42 @@
+.gradle/
+.omo/
+**/.jython_cache/
+.idea/
+**/build/
+**/node_modules/
+**/__pycache__/
+*.py[cod]
+docs/_site/
+docs/.cache/
+docker/gateway-data/
+docker/modules/*.modl
+docker/camel-modules/*.modl
+docker/signing/
+*.iml
+*.log
+.secrets
+migration-log*.md
+.resources
+local/
+# Development-only Kafka broker certificates and passwords (generated, never commit)
+docker/certs/
+
+# Gateway identity and private key material. These were committed before the repository had a rule
+# for them; a shared gateway keystore means every clone answers with the same TLS identity, and a
+# shared OPC-UA application UUID is the same problem in a different protocol. Ignition regenerates
+# all of it on first start, so a fresh clone is correct without them.
+ignition/**/keystore/*.pfx
+ignition/**/*-keystore/*.pfx
+ignition/**/uuid.txt
+
+# Certificate authorities and trusted peer certificates are per-deployment.
+ignition/**/*.der
+ignition/**/*.pem
+ignition/**/*.crt
+ignition/**/*.key
+
+# Password hashes belong to the deployment, not the repository.
+ignition/**/users.json
+
+# Runtime state written by the Gateway.
+ignition/**/*.idb

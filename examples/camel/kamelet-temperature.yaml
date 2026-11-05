@@ -1,0 +1,38 @@
+# Two numeric inputs, two instances of the SAME installed Kamelet, one output.
+- route:
+    id: kamelet-celsius-input
+    from:
+      uri: "ignition-tag:[default]CamelExamples/Kamelets/CelsiusInput?includeInitial=false"
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - to:
+                  uri: "kamelet:normalize-temperature-action/press01-normalizer?unit=C&machine=Press01"
+              - to:
+                  uri: direct:display-reading
+- route:
+    id: kamelet-fahrenheit-input
+    from:
+      uri: "ignition-tag:[default]CamelExamples/Kamelets/FahrenheitInput?includeInitial=false"
+      steps:
+        - filter:
+            simple: '${header.ignitionTagGood} == true'
+            steps:
+              - to:
+                  uri: "kamelet:normalize-temperature-action/press02-normalizer?unit=F&machine=Press02"
+              - to:
+                  uri: direct:display-reading
+- route:
+    id: kamelet-display-reading
+    from:
+      uri: direct:display-reading
+      steps:
+        - marshal:
+            json:
+              library: Jackson
+        - convertBodyTo:
+            type: java.lang.String
+            charset: UTF-8
+        - to:
+            uri: "ignition-tag:[default]CamelExamples/Kamelets/LatestReading"

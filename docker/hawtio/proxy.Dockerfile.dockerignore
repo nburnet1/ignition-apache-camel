@@ -1,0 +1,7 @@
+**
+!scripts/
+!scripts/camel-acceptance.py
+!scripts/camel-hawtio-proxy.py
+!docker/
+!docker/hawtio/
+!docker/hawtio/proxy.py

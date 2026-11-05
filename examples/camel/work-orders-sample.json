@@ -1,0 +1,7 @@
+[
+  {"id": "WO-1001", "location": "press-01", "quantity": 25},
+  {"id": "WO-1002", "location": "lathe-01", "quantity": 12},
+  {"id": "WO-1003", "location": "packer-01", "quantity": 50},
+  {"id": "WO-1004", "location": "press-01", "quantity": 10},
+  {"id": "WO-BAD", "location": "unknown-machine", "quantity": 5}
+]
